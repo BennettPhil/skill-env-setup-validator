@@ -1,44 +1,79 @@
 ---
 name: env-setup-validator
-description: Validate developer machine tools/versions against a manifest file.
+description: Validates that a developer machine has all required tools, runtimes, and services for a project by checking a manifest file.
 version: 0.1.0
 license: Apache-2.0
 ---
 
 # Environment Setup Validator
 
-## Purpose
-This skill checks whether a developer machine has required tools installed and validates versions against project requirements defined in a manifest file.
-
-## Instructions
-1. Create a manifest JSON file listing required tools and version patterns.
-2. Run `./scripts/run.sh --manifest <path>` to validate installed tools.
-3. Use `--format json` for machine-readable output.
-4. Use `--strict` to fail the command if any tool is missing or has a non-matching version.
-
-## Inputs
-- `--manifest <path>`: path to manifest JSON (default `.env-setup-manifest.json`)
-- `--format text|json`: output format (default `text`)
-- `--strict`: return non-zero when issues exist
-
-Manifest schema:
-```json
-{
-  "tools": [
-    { "name": "node", "version_command": "node --version", "version_regex": "^v20\\." },
-    { "name": "pnpm", "version_command": "pnpm --version", "version_regex": "^9\\." }
-  ]
-}
-```
-
-## Outputs
-- Text or JSON report listing each tool status:
-- `ok`: installed and version matches
-- `outdated`: installed but version regex mismatch
-- `missing`: command unavailable or execution failed
-- Exit code `0` on success, `1` when `--strict` and issues found, `2` for invalid manifest/usage
+Checks a developer's machine against a project requirements manifest and reports missing tools, wrong versions, and unavailable services.
 
 ## Constraints
-- Requires `jq` to parse manifest JSON.
-- Version checks depend on command output format.
-- Command execution uses `bash -lc`; manifest commands must be safe and trusted.
+
+- Reads requirements from a `.env-check.yaml` manifest in the project root.
+- Only checks; never installs or modifies the system.
+- Exit code 0 if all checks pass, 1 if any check fails, 2 on manifest errors.
+
+## Usage
+
+```bash
+# Check current directory for .env-check.yaml and validate
+./scripts/run.sh
+
+# Check a specific manifest
+./scripts/run.sh --manifest path/to/.env-check.yaml
+
+# JSON output for CI integration
+./scripts/run.sh --format json
+```
+
+## Manifest Format
+
+```yaml
+tools:
+  - name: node
+    command: node --version
+    version: ">=18.0.0"
+  - name: python3
+    command: python3 --version
+    version: ">=3.10"
+  - name: docker
+    command: docker --version
+
+services:
+  - name: postgresql
+    check: pg_isready -h localhost -p 5432
+  - name: redis
+    check: redis-cli ping
+```
+
+## Output
+
+Human-readable table by default:
+
+```
+Tool        Status   Found      Required
+----        ------   -----      --------
+node        PASS     v20.11.0   >=18.0.0
+python3     PASS     3.12.1     >=3.10
+docker      PASS     24.0.7     any
+git         FAIL     not found  any
+
+Service     Status
+-------     ------
+postgresql  PASS
+redis       FAIL     connection refused
+```
+
+## Options
+
+- `--manifest FILE` — Path to manifest (default: `.env-check.yaml`)
+- `--format text|json` — Output format (default: `text`)
+- `--help` — Show usage information
+
+## Limitations
+
+- Version comparison supports semver-like versions only (major.minor.patch).
+- Service checks rely on the service's own CLI client being available.
+- Does not support Windows; designed for macOS and Linux.
